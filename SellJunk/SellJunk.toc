@@ -1,7 +1,7 @@
 ## Interface: 30300
 ## X-Compatible-With: 40000
 ## Title: SellJunk
-## Notes: |@Version: 1@|Sells all junk in your inventory at once.
+## Notes: |@Version: 2@|Sells all junk in your inventory at once.
 ## Author: CrazyBenny of Stormrage-EU
 ## X-Email: s_m AT centrum DOT cz
 ## LastUpdate: 2010-09-02T16:43:27Z
