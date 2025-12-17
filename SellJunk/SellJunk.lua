@@ -5,12 +5,14 @@ local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 
 local addonName, addonTable = ...
 local L = addonTable.L
+local _
 
 addon.optionsFrame = {}
 local options = nil
 
-addon.sellButton = CreateFrame("Button", nil, MerchantFrame, "OptionsButtonTemplate")
-addon.sellButton:SetPoint("TOPLEFT", 65, -33)
+addon.sellButton = CreateFrame("Button", nil, MerchantFrame, "UIPanelButtonTemplate")
+addon.sellButton:SetPoint("TOPRIGHT", -23, -1)
+addon.sellButton:SetSize(90, 20)
 addon.sellButton:SetText(L["Sell Junk"])
 addon.sellButton:SetScript("OnClick", function() SellJunk:Sell() end)
 
@@ -25,6 +27,8 @@ local GetContainerItemInfo = GetContainerItemInfo
 local GetItemInfo = GetItemInfo
 local PickupContainerItem = PickupContainerItem
 local PickupMerchantItem = PickupMerchantItem
+local GetContainerNumSlots = GetContainerNumSlots
+local GetContainerItemLink = GetContainerItemLink
 
 
 function addon:OnInitialize()
@@ -37,7 +41,8 @@ function addon:OnInitialize()
       auto = false,
 			max12 = true,
 			printGold = true,
-      showSpam = true
+      showSpam = true,
+      ignoreSoulbound = false
     },
     global = {
       exceptions = {},
@@ -66,11 +71,9 @@ function addon:AddProfit(profit)
 	end
 end
 
--------------------------------------------------------------
--- Sells items:                                            --
---   - grey quality, unless it's in exception list         --
---   - better than grey quality, if it's in exception list --
--------------------------------------------------------------
+-----------------------------------------------
+-- Sells items: see CheckItemIsJunk comments --
+-----------------------------------------------
 function addon:Sell()
 	local limit = 0
   local currPrice
@@ -80,26 +83,22 @@ function addon:Sell()
   for bag = 0,4 do
     for slot = 1,GetContainerNumSlots(bag) do
       local item = GetContainerItemLink(bag,slot)
-      if item then
-				-- is it grey quality item?
-        local grey = string_find(item,"|cff9d9d9d")
 
-        if (grey and (not addon:isException(item))) or ((not grey) and (addon:isException(item))) then
-          currPrice = select(11, GetItemInfo(item)) * select(2, GetContainerItemInfo(bag, slot))
-          -- this should get rid of problems with grey items, that cant be sell to a vendor
-          if currPrice > 0 then
-            addon:AddProfit(currPrice)
-            PickupContainerItem(bag, slot)
-            PickupMerchantItem()
-            if showSpam then
-              self:Print(L["Sold"]..": "..item)
-            end
+      if self:CheckItemIsJunk(item,bag,slot) then
+        currPrice = (select(11, GetItemInfo(item)) or 0) * select(2, GetContainerItemInfo(bag, slot))
+        -- this should get rid of problems with grey items, that cant be sell to a vendor
+        if currPrice > 0 then
+          addon:AddProfit(currPrice)
+          PickupContainerItem(bag, slot)
+          PickupMerchantItem()
+          if showSpam then
+            self:Print(L["Sold"]..": "..item)
+          end
 
-            if max12 then
-              limit = limit + 1
-              if limit == 12 then
-                return
-              end
+          if max12 then
+            limit = limit + 1
+            if limit == 12 then
+              return
             end
           end
         end
@@ -113,11 +112,9 @@ function addon:Sell()
 	self.total = 0
 end
 
--------------------------------------------------------------
--- Destroys items:                                         --
---   - grey quality, unless it's in exception list         --
---   - better than grey quality, if it's in exception list --
--------------------------------------------------------------
+--------------------------------------------------
+-- Destroys items: see CheckItemIsJunk comments --
+--------------------------------------------------
 function addon:Destroy(count)
   local limit = 9001 -- it's over NINE THOUSAND!!!
   if count ~= nil then
@@ -129,20 +126,16 @@ function addon:Destroy(count)
   for bag = 0,4 do
     for slot = 1,GetContainerNumSlots(bag) do
       local item = GetContainerItemLink(bag,slot)
-      if item then
-				-- is it grey quality item?
-        local grey = string_find(item,"|cff9d9d9d")
 
-        if (grey and (not addon:isException(item))) or ((not grey) and (addon:isException(item))) then
-          PickupContainerItem(bag, slot)
-					DeleteCursorItem()
-          if showSpam then
-            self:Print(L["Destroyed"]..": "..item)
-          end
-          limit = limit - 1
-          if limit == 0 then
-            break
-          end
+      if self:CheckItemIsJunk(item,bag,slot) then
+        PickupContainerItem(bag, slot)
+		DeleteCursorItem()
+        if showSpam then
+          self:Print(L["Destroyed"]..": "..item)
+        end
+        limit = limit - 1
+        if limit == 0 then
+          break
         end
       end
     end
@@ -158,20 +151,46 @@ function addon:Destroy(count)
 end
 
 function addon:PrintGold()
-	local ret = ""
-	local gold = floor(self.total / (COPPER_PER_SILVER * SILVER_PER_GOLD));
-	local silver = floor((self.total - (gold * COPPER_PER_SILVER * SILVER_PER_GOLD)) / COPPER_PER_SILVER);
-	local copper = mod(self.total, COPPER_PER_SILVER);
-	if gold > 0 then
-		ret = gold.." "..L["gold"].." "
+  if self.total > 0 then
+		self:Print(L["Gained"]..": "..GetMoneyString(self.total))
 	end
-	if silver > 0 or gold > 0 then
-		ret = ret..silver .." "..L["silver"].." "
+end
+
+-------------------------------------------------------------------------------------------------------
+-- Junk condition:                                                                                   --
+--   - grey quality, unless it's in exception list, but...                                           --
+--         ... not an armor or weapon, unless it's soulbound or marked to ignore soulbound           --
+--   - better than grey quality, if it's in exception list                                           --
+-------------------------------------------------------------------------------------------------------
+function addon:CheckItemIsJunk(item,bag,slot)
+	if not item then
+		return false
 	end
-	ret = ret..copper.." "..L["copper"]
-	if silver > 0 or gold > 0  or copper > 0 then
-		self:Print(L["Gained"]..": "..ret)
+
+	-- is it grey quality item?
+    local grey = string_find(item,"|cff9d9d9d")
+
+	-- is it an armor or weapon?
+	local _, _, _, _, _, sType, _, _ = GetItemInfo(item);
+	local armor_weapon = ((sType == "Armor") or (sType == "Weapon"));
+
+	-- is it soulbound?
+	local isBound = C_Item.IsBound(ItemLocation:CreateFromBagAndSlot(bag,slot))
+
+	-- ignore soulbound configuration
+	local ignoreSoulbound = addon.db.char.ignoreSoulbound
+
+	if grey and (not addon:isException(item)) then
+		if (not armor_weapon) or (armor_weapon and isBound) or (ignoreSoulbound) then
+			return true
+		end
 	end
+
+    if (not grey) and (addon:isException(item)) then
+        return true
+    end
+
+	return false
 end
 
 function addon:Add(link)
@@ -358,48 +377,61 @@ function addon:PopulateOptions()
 							get 	= function() return addon.db.char.printGold end,
 							set 	= function() self.db.char.printGold = not self.db.char.printGold end,
 						},
-            divider4 = {
+						divider4 = {
 							order	= 7,
 							type	= "description",
 							name	= "",
 						},
-            showSpam = {
-              order = 8,
-              type  = "toggle",
-              name  = L["Show 'item sold' spam"],
-              desc  = L["Prints itemlinks to chat, when automatically selling items."],
-              get   = function() return addon.db.char.showSpam end,
-              set   = function() addon.db.char.showSpam = not addon.db.char.showSpam end,
-            },
+						showSpam = {
+							order = 8,
+							type  = "toggle",
+							name  = L["Show 'item sold' spam"],
+							desc  = L["Prints itemlinks to chat, when automatically selling items."],
+							get   = function() return addon.db.char.showSpam end,
+							set   = function() addon.db.char.showSpam = not addon.db.char.showSpam end,
+						},
 						divider5 = {
 							order	= 9,
+							type	= "description",
+							name	= "",
+						},
+						ignoreSoulbound = {
+							order = 10,
+							type  = "toggle",
+							name  = L["Ignore soulbound"],
+							desc  = L["Ignore soulbound and sell/destroy items marked as BoE"],
+							get   = function() return addon.db.char.ignoreSoulbound end,
+							set   = function() addon.db.char.ignoreSoulbound = not addon.db.char.ignoreSoulbound end,
+						},
+						divider6 = {
+							order	= 11,
 							type	= "header",
 							name	= L["Clear exceptions"],
 						},
 						clearglobal = {
-							order	= 10,
+							order	= 12,
 							type 	= "execute",
 							name 	= L["Clear"],
-              desc  = L["Removes all exceptions."],
+							desc  = L["Removes all exceptions."],
 							func 	= function() addon:ClearDB() end,
 						},
-						divider6 = {
-							order	= 12,
+						divider7 = {
+							order	= 13,
 							type	= "description",
 							name	= "",
 						},
 						header1 = {
-							order	= 13,
+							order	= 14,
 							type	= "header",
 							name	= L["Exceptions"],
 						},
 						note1 = {
-							order = 14,
+							order = 15,
 							type 	= "description",
 							name	= L["Drag item into this window to add/remove it from exception list"],
 						},
 						add = {
-							order	= 15,
+							order	= 16,
 							type 	= "input",
 							name 	= L["Add item"]..':',
 							usage = L["<Item Link>"],
@@ -407,7 +439,7 @@ function addon:PopulateOptions()
 							set 	= function(info, v) addon:Add(v) end,
 						},
 						rem = {
-							order	= 16,
+							order	= 17,
 							type 	= "input",
 							name 	= L["Remove item"]..':',
 							usage 	= L["<Item Link>"],
