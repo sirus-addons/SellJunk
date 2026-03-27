@@ -15,6 +15,9 @@ addon.sellButton:SetPoint("TOPRIGHT", -23, -1)
 addon.sellButton:SetSize(90, 20)
 addon.sellButton:SetText(L["Sell Junk"])
 addon.sellButton:SetScript("OnClick", function() SellJunk:Sell() end)
+addon.sellButton:SetScript("OnShow", function(this)
+	this:SetFrameLevel(this:GetParent():GetFrameLevel() + 2)
+end)
 
 -- upvalues
 local floor = floor
@@ -197,6 +200,9 @@ function addon:Add(link)
 
 	-- remove all trailing whitespace
 	link = strtrim(link)
+	if link == "" then
+		return
+	end
 
 	-- extract name from an itemlink
   local found, _, name = string_find(link, "^|c%x+|H.+|h.(.*)\].+")
@@ -221,6 +227,9 @@ end
 function addon:Rem(link)
 	-- remove all trailing whitespace
 	link = strtrim(link)
+	if link == "" then
+		return
+	end
 
 	-- extract name from an itemlink
   local isLink, _, name = string_find(link, "^|c%x+|H.+|h.(.*)\].+")
@@ -345,6 +354,7 @@ function addon:PopulateOptions()
 						auto = {
 							order	= 2,
 							type 	= "toggle",
+							width 	= "double",
 							name 	= L["Automatically sell junk"],
 							desc 	= L["Toggles the automatic selling of junk when the merchant window is opened."],
 							get 	= function() return addon.db.char.auto end,
@@ -359,6 +369,7 @@ function addon:PopulateOptions()
 						max12 = {
 							order = 4,
 							type  = "toggle",
+							width = "double",
 							name  = L["Sell max. 12 items"],
 							desc  = L["This is failsafe mode. Will sell only 12 items in one pass. In case of an error, all items can be bought back from vendor."],
 							get 	= function() return addon.db.char.max12 end,
@@ -372,6 +383,7 @@ function addon:PopulateOptions()
 						printGold = {
 							order = 6,
 							type  = "toggle",
+							width = "double",
 							name  = L["Show gold gained"],
 							desc  = L["Shows gold gained from selling trash."],
 							get 	= function() return addon.db.char.printGold end,
@@ -385,6 +397,7 @@ function addon:PopulateOptions()
 						showSpam = {
 							order = 8,
 							type  = "toggle",
+							width = "double",
 							name  = L["Show 'item sold' spam"],
 							desc  = L["Prints itemlinks to chat, when automatically selling items."],
 							get   = function() return addon.db.char.showSpam end,
@@ -398,6 +411,7 @@ function addon:PopulateOptions()
 						ignoreSoulbound = {
 							order = 10,
 							type  = "toggle",
+							width = "double",
 							name  = L["Ignore soulbound"],
 							desc  = L["Ignore soulbound and sell/destroy items marked as BoE"],
 							get   = function() return addon.db.char.ignoreSoulbound end,
