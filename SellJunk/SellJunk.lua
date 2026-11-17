@@ -11,11 +11,12 @@ addon.optionsFrame = {}
 local options = nil
 
 addon.sellButton = CreateFrame("Button", nil, MerchantFrame, "UIPanelButtonTemplate")
-addon.sellButton:SetPoint("TOPRIGHT", -23, -1)
+addon.sellButton:SetPoint("BOTTOMLEFT", 6, 5)
 addon.sellButton:SetSize(90, 20)
 addon.sellButton:SetText(L["Sell Junk"])
+addon.sellButton:SetWidth(max(90, addon.sellButton:GetTextWidth() + 24))
 addon.sellButton:SetScript("OnClick", function() SellJunk:Sell() end)
-addon.sellButton:SetScript("OnShow", function(this)
+addon.sellButton:HookScript("OnShow", function(this)
 	this:SetFrameLevel(this:GetParent():GetFrameLevel() + 2)
 end)
 
@@ -93,7 +94,7 @@ function addon:Sell()
         if currPrice > 0 then
           addon:AddProfit(currPrice)
           PickupContainerItem(bag, slot)
-          PickupMerchantItem()
+          PickupMerchantItem(0)
           if showSpam then
             self:Print(L["Sold"]..": "..item)
           end
@@ -101,11 +102,14 @@ function addon:Sell()
           if max12 then
             limit = limit + 1
             if limit == 12 then
-              return
+              break
             end
           end
         end
       end
+    end
+    if limit == 12 then
+      break
     end
   end
 
@@ -121,7 +125,11 @@ end
 function addon:Destroy(count)
   local limit = 9001 -- it's over NINE THOUSAND!!!
   if count ~= nil then
-    limit = count
+    limit = floor(tonumber(count) or 0)
+    if not (limit >= 1) then
+      self:Print(L["Command accepts only a positive number."])
+      return
+    end
   end
 
   local showSpam = addon.db.char.showSpam
@@ -174,8 +182,8 @@ function addon:CheckItemIsJunk(item,bag,slot)
     local grey = string_find(item,"|cff9d9d9d")
 
 	-- is it an armor or weapon?
-	local _, _, _, _, _, sType, _, _ = GetItemInfo(item);
-	local armor_weapon = ((sType == "Armor") or (sType == "Weapon"));
+	local classID = select(6, GetItemInfoInstant(item));
+	local armor_weapon = ((classID == 2) or (classID == 4));
 
 	-- is it soulbound?
 	local isBound = C_Item.IsBound(ItemLocation:CreateFromBagAndSlot(bag,slot))
@@ -260,11 +268,7 @@ function addon:Rem(link)
     end
 
     if found then
-      if exceptions[k + 1] then
-        exceptions[k] = exceptions[k + 1]
-      else
-        exceptions[k] = nil
-      end
+      tremove(exceptions, k)
       self:Print(L["Removed"]..": "..link)
       break
     end
